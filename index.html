@@ -1,0 +1,435 @@
+<html><head><base href="https://websim.ai/checkers-game/" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jogo de Damas Aprimorado</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+
+  :root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --background-color: #ecf0f1;
+    --board-light: #f0d9b5;
+    --board-dark: #b58863;
+    --piece-black: #333333;
+    --piece-white: #ffffff;
+    --highlight-color: rgba(255, 255, 0, 0.5);
+    --possible-move: rgba(0, 255, 0, 0.3);
+  }
+
+  body, html {
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--background-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    color: #333;
+  }
+
+  .container {
+    text-align: center;
+    background-color: white;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  h1 {
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    gap: 1px;
+    margin: 1rem auto;
+    border: 2px solid #333;
+  }
+
+  .square {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .light {
+    background-color: var(--board-light);
+  }
+
+  .dark {
+    background-color: var(--board-dark);
+  }
+
+  .piece {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 2px solid #333;
+    transition: transform 0.3s ease;
+    cursor: pointer;
+  }
+
+  .piece:hover {
+    transform: scale(1.1);
+  }
+
+  .black {
+    background-color: var(--piece-black);
+  }
+
+  .white {
+    background-color: var(--piece-white);
+  }
+
+  .king::after {
+    content: '♔';
+    font-size: 30px;
+    color: gold;
+    position: absolute;
+    line-height: 50px;
+  }
+
+  .highlight {
+    background-color: var(--highlight-color);
+  }
+
+  .possible-move {
+    background-color: var(--possible-move);
+  }
+
+  #status {
+    margin-top: 1rem;
+    font-weight: bold;
+    font-size: 1.2rem;
+  }
+
+  #new-game {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+
+  #new-game:hover {
+    background-color: #27ae60;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Jogo de Damas</h1>
+    <div id="board"></div>
+    <div id="status">Vez das peças brancas</div>
+    <button id="new-game">Novo Jogo</button>
+  </div>
+
+  <script>
+    const board = document.getElementById('board');
+    const status = document.getElementById('status');
+    const newGameBtn = document.getElementById('new-game');
+    let game = null;
+
+    class CheckersGame {
+      constructor() {
+        this.board = [];
+        this.currentPlayer = 'white';
+        this.selectedPiece = null;
+        this.possibleMoves = [];
+        this.initBoard();
+      }
+
+      initBoard() {
+        for (let row = 0; row < 8; row++) {
+          this.board[row] = [];
+          for (let col = 0; col < 8; col++) {
+            if ((row + col) % 2 === 1) {
+              if (row < 3) {
+                this.board[row][col] = { color: 'black', isKing: false };
+              } else if (row > 4) {
+                this.board[row][col] = { color: 'white', isKing: false };
+              } else {
+                this.board[row][col] = null;
+              }
+            } else {
+              this.board[row][col] = null;
+            }
+          }
+        }
+      }
+
+      movePiece(fromRow, fromCol, toRow, toCol) {
+        const piece = this.board[fromRow][fromCol];
+        this.board[toRow][toCol] = piece;
+        this.board[fromRow][fromCol] = null;
+
+        // Verificar se a peça se tornou uma dama
+        if ((piece.color === 'white' && toRow === 0) || (piece.color === 'black' && toRow === 7)) {
+          piece.isKing = true;
+        }
+
+        // Remover peças capturadas
+        const rowStep = toRow > fromRow ? 1 : -1;
+        const colStep = toCol > fromCol ? 1 : -1;
+        let currentRow = fromRow + rowStep;
+        let currentCol = fromCol + colStep;
+        while (currentRow !== toRow || currentCol !== toCol) {
+          if (this.board[currentRow][currentCol]) {
+            this.board[currentRow][currentCol] = null;
+          }
+          currentRow += rowStep;
+          currentCol += colStep;
+        }
+
+        this.currentPlayer = this.currentPlayer === 'white' ? 'black' : 'white';
+        this.selectedPiece = null;
+        this.possibleMoves = [];
+        this.updateStatus();
+
+        if (this.currentPlayer === 'black') {
+          setTimeout(() => this.npcMove(), 500);
+        }
+      }
+
+      getPossibleMoves(row, col) {
+        const piece = this.board[row][col];
+        if (!piece || piece.color !== this.currentPlayer) return [];
+
+        const moves = [];
+        const directions = piece.isKing ? [-1, 1] : piece.color === 'white' ? [-1] : [1];
+
+        const simpleJumps = this.getJumps(row, col, directions, 1);
+        const multiJumps = this.getMultiJumps(row, col, directions);
+
+        return [...simpleJumps, ...multiJumps];
+      }
+
+      getJumps(row, col, directions, step) {
+        const moves = [];
+        for (const rowDir of directions) {
+          for (const colDir of [-1, 1]) {
+            const newRow = row + rowDir * step;
+            const newCol = col + colDir * step;
+            if (this.isValidMove(row, col, newRow, newCol)) {
+              moves.push({ fromRow: row, fromCol: col, toRow: newRow, toCol: newCol, captures: [] });
+            }
+            // Verificar captura
+            const jumpRow = row + 2 * rowDir * step;
+            const jumpCol = col + 2 * colDir * step;
+            if (this.isValidJump(row, col, jumpRow, jumpCol)) {
+              const capturedRow = row + rowDir * step;
+              const capturedCol = col + colDir * step;
+              moves.push({ fromRow: row, fromCol: col, toRow: jumpRow, toCol: jumpCol, captures: [{ row: capturedRow, col: capturedCol }] });
+            }
+          }
+        }
+        return moves;
+      }
+
+      getMultiJumps(row, col, directions) {
+        const moves = [];
+        const visited = new Set();
+        
+        const dfs = (currentRow, currentCol, path, captures) => {
+          const key = `${currentRow},${currentCol}`;
+          if (visited.has(key)) return;
+          visited.add(key);
+
+          const jumps = this.getJumps(currentRow, currentCol, directions, 1).filter(move => move.captures.length > 0);
+          
+          if (jumps.length === 0 || path.length > 0) {
+            moves.push({ fromRow: row, fromCol: col, toRow: currentRow, toCol: currentCol, captures });
+          }
+
+          for (const jump of jumps) {
+            const newCaptures = [...captures, ...jump.captures];
+            dfs(jump.toRow, jump.toCol, [...path, jump], newCaptures);
+          }
+
+          visited.delete(key);
+        };
+
+        dfs(row, col, [], []);
+        return moves.filter(move => move.captures.length > 0);
+      }
+
+      getAllPossibleMoves() {
+        let allMoves = [];
+        for (let row = 0; row < 8; row++) {
+          for (let col = 0; col < 8; col++) {
+            if (this.board[row][col] && this.board[row][col].color === this.currentPlayer) {
+              allMoves = allMoves.concat(this.getPossibleMoves(row, col));
+            }
+          }
+        }
+        return allMoves;
+      }
+
+      isValidMove(fromRow, fromCol, toRow, toCol) {
+        if (toRow < 0 || toRow > 7 || toCol < 0 || toCol > 7) return false;
+        if (this.board[toRow][toCol]) return false;
+        const piece = this.board[fromRow][fromCol];
+        if (!piece) return false;
+        if (!piece.isKing && piece.color === 'white' && toRow > fromRow) return false;
+        if (!piece.isKing && piece.color === 'black' && toRow < fromRow) return false;
+        return true;
+      }
+
+      isValidJump(fromRow, fromCol, toRow, toCol) {
+        if (!this.isValidMove(fromRow, fromCol, toRow, toCol)) return false;
+        const middleRow = (fromRow + toRow) / 2;
+        const middleCol = (fromCol + toCol) / 2;
+        const middlePiece = this.board[middleRow][middleCol];
+        return middlePiece && middlePiece.color !== this.currentPlayer;
+      }
+
+      updateStatus() {
+        status.textContent = `Vez das peças ${this.currentPlayer === 'white' ? 'brancas' : 'pretas'}`;
+      }
+
+      npcMove() {
+        const allMoves = this.getAllPossibleMoves();
+        if (allMoves.length === 0) {
+          this.endGame('white');
+          return;
+        }
+
+        const jumpMoves = allMoves.filter(move => move.captures.length > 0);
+        const moveToMake = jumpMoves.length > 0 ? jumpMoves[Math.floor(Math.random() * jumpMoves.length)] : allMoves[Math.floor(Math.random() * allMoves.length)];
+
+        this.movePiece(moveToMake.fromRow, moveToMake.fromCol, moveToMake.toRow, moveToMake.toCol);
+        updateBoard();
+      }
+
+      endGame(winner) {
+        status.textContent = `Fim de jogo! ${winner === 'white' ? 'Brancas' : 'Pretas'} venceram!`;
+      }
+
+      checkForWinner() {
+        const whitePieces = this.board.flat().filter(piece => piece && piece.color === 'white');
+        const blackPieces = this.board.flat().filter(piece => piece && piece.color === 'black');
+
+        if (whitePieces.length === 0) {
+          this.endGame('black');
+        } else if (blackPieces.length === 0) {
+          this.endGame('white');
+        }
+
+        const currentPlayerMoves = this.getAllPossibleMoves();
+        if (currentPlayerMoves.length === 0) {
+          this.endGame(this.currentPlayer === 'white' ? 'black' : 'white');
+        }
+      }
+    }
+
+    function createBoard() {
+      board.innerHTML = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const square = document.createElement('div');
+          square.classList.add('square', (row + col) % 2 === 0 ? 'light' : 'dark');
+          square.dataset.row = row;
+          square.dataset.col = col;
+          square.addEventListener('click', handleSquareClick);
+          board.appendChild(square);
+        }
+      }
+    }
+
+    function updateBoard() {
+      const squares = board.querySelectorAll('.square');
+      squares.forEach(square => {
+        const row = parseInt(square.dataset.row);
+        const col = parseInt(square.dataset.col);
+        const piece = game.board[row][col];
+        square.innerHTML = '';
+        if (piece) {
+          const pieceElement = document.createElement('div');
+          pieceElement.classList.add('piece', piece.color);
+          if (piece.isKing) pieceElement.classList.add('king');
+          pieceElement.addEventListener('click', handlePieceClick);
+          pieceElement.dataset.row = row;
+          pieceElement.dataset.col = col;
+          square.appendChild(pieceElement);
+        }
+      });
+    }
+
+    function handleSquareClick(event) {
+      if (!game || game.currentPlayer === 'black') return;
+
+      const row = parseInt(event.target.dataset.row);
+      const col = parseInt(event.target.dataset.col);
+
+      if (game.selectedPiece) {
+        const move = game.possibleMoves.find(m => m.toRow === row && m.toCol === col);
+        if (move) {
+          game.movePiece(game.selectedPiece.row, game.selectedPiece.col, row, col);
+          updateBoard();
+          game.checkForWinner();
+        } else {
+          game.selectedPiece = null;
+          game.possibleMoves = [];
+        }
+      }
+
+      highlightPossibleMoves();
+    }
+
+    function handlePieceClick(event) {
+      event.stopPropagation();
+      if (!game || game.currentPlayer === 'black') return;
+
+      const row = parseInt(event.target.dataset.row);
+      const col = parseInt(event.target.dataset.col);
+      const piece = game.board[row][col];
+
+      if (piece && piece.color === game.currentPlayer) {
+        game.selectedPiece = { row, col };
+        game.possibleMoves = game.getPossibleMoves(row, col);
+        highlightPossibleMoves();
+      }
+    }
+
+    function highlightPossibleMoves() {
+      const squares = board.querySelectorAll('.square');
+      squares.forEach(square => {
+        square.classList.remove('highlight');
+        square.classList.remove('possible-move');
+      });
+
+      if (game.selectedPiece) {
+        const selectedSquare = board.querySelector(`[data-row="${game.selectedPiece.row}"][data-col="${game.selectedPiece.col}"]`);
+        if (selectedSquare) selectedSquare.classList.add('highlight');
+
+        game.possibleMoves.forEach(move => {
+          const square = board.querySelector(`[data-row="${move.toRow}"][data-col="${move.toCol}"]`);
+          if (square) square.classList.add('possible-move');
+        });
+      }
+    }
+
+    function startNewGame() {
+      game = new CheckersGame();
+      updateBoard();
+    }
+
+    createBoard();
+    startNewGame();
+
+    newGameBtn.addEventListener('click', startNewGame);
+  </script>
+</body>
+</html>
